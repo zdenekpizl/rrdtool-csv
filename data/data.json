@@ -1,0 +1,30 @@
+{
+    "machines":[
+        {
+            "name": "localhost.localdomain",
+            "charts":[
+                {
+                    "name": "cpu",
+                    "aggregation": "AVERAGE",
+                    "variables":[
+                        {
+                            "name": "iowait",
+                            "aggregation": "AVERAGE"
+                        },
+                        {
+                            "name": "system",
+                            "aggregation": "AVERAGE"
+                        },
+                        {
+                            "name": "user",
+                            "aggregation": "AVERAGE"
+                        },
+                        {
+                            "name": "idle"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
