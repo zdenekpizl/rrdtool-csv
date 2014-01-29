@@ -8,6 +8,9 @@ import json
 import subprocess
 import os
 import re
+import logging
+import logging.handlers
+
 from rrdtoolcsv import rrdtoolcsv_settings
 
 def check_output(*popenargs, **kwargs):
@@ -23,6 +26,7 @@ def check_output(*popenargs, **kwargs):
         raise error
     return output
 
+
 def parse_args():
     """Parse command-line args"""
     parser = argparse.ArgumentParser(
@@ -36,10 +40,15 @@ def parse_args():
     parser.add_argument('--daemon', type=str,default=rrdtoolcsv_settings.DAEMON,help='rrdcached daemon')
     return parser.parse_args()
 
+
 def run():
     """Execute the script"""
     args = parse_args()
-    print args.resolution
+
+    logger.info("args.resolution: %s \n" % args.resolution)
+    logger.info("args.start: %s \n" % args.start)
+    logger.info("args.end: %s \n" % args.end)
+
     rrdtool_output = {}
     files = files_to_read(args.json_file,args.rrd_dir)
 
@@ -49,6 +58,19 @@ def run():
     #Read rrd files with `rrdtool fetch` and store outputs in a dictionary
     for file in files:
         file_path = os.path.join(args.rrd_dir, file.name)
+
+        # use recorder last timestamp
+        if str(args.start).lower() == "last" || str(args.start).lower() == 'l':
+            try:
+                lastfile = args.csv_file + ".timestamp"
+                f = os.open(lastfile, os.O_RDONLY)
+                timestamp = f.readline()
+                args.start = timestamp
+                os.close(f)
+            except OSError:
+                args.start = rrdtoolcsv_settings.START
+                logger.critical("Cannot get lasttimestamp from %s for rrdtool file %s\n" %(lastfile, file_path))
+
         call = ['rrdtool', 'fetch', file_path, file.aggregation,
                 '-r', str(args.resolution),
                 '-s', str(args.start), '-e', str(args.end)]
@@ -57,7 +79,16 @@ def run():
         rrdtool_output[file.get_alias()] = subprocess.check_output(call)
 
     #Merge results in a dictionary keyed by timestamps and dump them to csv file
-    dump(merge(rrdtool_output),args.csv_file)
+    lasttimestamp = dump(merge(rrdtool_output),args.csv_file)
+    # write last exported timestamp to args.csv_file.timestamp file
+    try:
+        lastfile = args.csv_file + ".timestamp"
+        f = os.open(lastfile, os.O_CREAT | os.O_WRONLY | os.O_EXCL)
+        os.write(f, "%s\n" % lasttimestamp)
+        os.close(f)
+    except OSError:
+        logger.critical("Failed to save last exported timestamp to %s (rrdtool file %s)\n" %(lockfile,file_path))
+
 
 def files_to_read(json_file,rrd_dir):
     """
@@ -162,6 +193,7 @@ def dump(merged_results,csv_file):
         writer = csv.writer(f)
         writer.writerow(headers)
         timestamps = sorted(merged_results.keys())
+        lasttimestamp = timestamps[-1]
         for timestamp in timestamps:
             row = list()
             row.append(timestamp)
@@ -172,6 +204,8 @@ def dump(merged_results,csv_file):
                 else:
                     row.append('nan')
             writer.writerow(row)
+
+    return lasttimestamp
 
 
 class MatchedFile():
@@ -191,4 +225,13 @@ class MatchedFile():
             return self.alias
 
 if __name__ == '__main__':
+    global logger
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    syslog = logging.handlers.SysLogHandler(address='/dev/log')
+    formatter = logging.Formatter('RRDTOOL-CSV: %(levelname)s %(message)s')
+    syslog.setFormatter(formatter)
+    logger.addHandler(syslog)
+
     run()
