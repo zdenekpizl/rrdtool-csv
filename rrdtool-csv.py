@@ -93,11 +93,10 @@ def run():
                 '-s', str(args.start), '-e', str(args.end)]
         if args.daemon:
             call.append(['--daemon',args.daemon])
-        rrdtool_output[file.get_alias()] = subprocess.check_output(call)
-        rrdtool_output_machine[file.get_alias()] = file.machine
+        rrdtool_output[file.machine+"."+file.get_alias()] = subprocess.check_output(call)
 
     #Merge results in a dictionary keyed by timestamps and dump them to csv file
-    dump(merge(rrdtool_output),args.csv_file)
+    dump(merge(rrdtool_output), args.csv_file)
 
     # write last exported timestamp to args.csv_file.timestamp file
     #try:
@@ -168,7 +167,7 @@ def file_matches(file_pattern, data, file_name):
     return None
 
 
-def merge(rrdtool_output, rrdtool_output_machine):
+def merge(rrdtool_output):
     """
     Merge data from raw rrdtool output to a dictionary keyed by timestamp
 
@@ -177,10 +176,10 @@ def merge(rrdtool_output, rrdtool_output_machine):
      Each value is a dictionary mapping file alias to the value at given timestamp.
     """
     result = dict()
-    for alias, output in rrdtool_output.iteritems():
+    for combinedalias, output in rrdtool_output.iteritems():
         #Convert raw output to list of rows omitting empty rows
+        machine, alias = combinedalias.split('.',1)
         rows = output.split('\n')[2:-1]
-        machine = rrdtool_output_machine[alias]
 
         #Parse rows and add values to the result
         for row in rows:
@@ -249,4 +248,3 @@ class MatchedFile():
 
 if __name__ == '__main__':
     run()
-    
