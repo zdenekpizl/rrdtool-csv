@@ -66,7 +66,6 @@ def run():
     logger.info("args.end: %s \n" % args.end)
 
     rrdtool_output = {}
-    rrdtool_output_machine = {}
     files = files_to_read(args.json_file,args.rrd_dir)
 
     if not "check_output" in dir(subprocess):
@@ -93,7 +92,7 @@ def run():
                 '-s', str(args.start), '-e', str(args.end)]
         if args.daemon:
             call.append(['--daemon',args.daemon])
-        rrdtool_output[file.machine+"#"+file.get_alias()] = subprocess.check_output(call)
+        rrdtool_output[fname.machine+"#"+fname.get_alias()] = subprocess.check_output(call)
 
     #Merge results in a dictionary keyed by timestamps and dump them to csv file
     dump(merge(rrdtool_output), args.csv_file)
@@ -193,7 +192,8 @@ def merge(rrdtool_output):
             value = split[1].replace(',', '.')
             result.append([machine, timestamp, alias, value])
 
-    return result.sort(key=mysortkey)
+    result.sort(key=mysortkey)
+    return result
 
 
 def dump(merged_results, csv_file):
@@ -229,6 +229,9 @@ class MatchedFile():
             return self.chart+'_'+self.variable
         else:
             return self.alias
+
+    def get_machine(self):
+        return self.machine
 
 
 if __name__ == '__main__':
