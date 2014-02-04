@@ -93,7 +93,7 @@ def run():
                 '-s', str(args.start), '-e', str(args.end)]
         if args.daemon:
             call.append(['--daemon',args.daemon])
-        rrdtool_output[file.machine+"."+file.get_alias()] = subprocess.check_output(call)
+        rrdtool_output[file.machine+"#"+file.get_alias()] = subprocess.check_output(call)
 
     #Merge results in a dictionary keyed by timestamps and dump them to csv file
     dump(merge(rrdtool_output), args.csv_file)
@@ -175,23 +175,25 @@ def merge(rrdtool_output):
     @return dict result: dictionary of dictionaries containing merged rrd data mapped by timestamp.
      Each value is a dictionary mapping file alias to the value at given timestamp.
     """
-    result = dict()
+
+    # sort full list by machine and timestamp
+    def mysortkey(i):
+        return str(i[0])+str(i[1])
+
+    result = list()
     for combinedalias, output in rrdtool_output.iteritems():
         #Convert raw output to list of rows omitting empty rows
-        machine, alias = combinedalias.split('.',1)
+        machine, alias = combinedalias.split('#',1)
         rows = output.split('\n')[2:-1]
 
         #Parse rows and add values to the result
         for row in rows:
-
             split = row.split(': ', 1)
             timestamp = split[0]
             value = split[1].replace(',', '.')
+            result.append([machine, timestamp, alias, value])
 
-            ts_values = result.setdefault(timestamp, dict())
-            ts_values[alias] = float(value)
-
-    return result
+    return result.sort(key=mysortkey)
 
 
 def dump(merged_results, csv_file):
@@ -201,32 +203,15 @@ def dump(merged_results, csv_file):
     @param str csv_file: path to the file to write
     """
 
-    #find all headers
-    headers = set()
-    for data in merged_results.values():
-        [headers.add(alias) for alias in data.keys()]
+    #generate and write a header
+    headers = ["machine", "timestamp", "metric", "value"]
 
-    #generate and write rows
-    headers = list(headers)
-    headers.insert(0, 'timestamp')
-
+    # write all rows from sorted result list
     with open(csv_file, 'wb') as f:
         writer = csv.writer(f)
         writer.writerow(headers)
-        timestamps = sorted(merged_results.keys())
-        lasttimestamp = timestamps[-1]
-        for timestamp in timestamps:
-            row = list()
-            row.append(timestamp)
-            for header in headers[1:]:
-                data = merged_results[timestamp]
-                if header in data:
-                    row.append(str(data[header]))
-                else:
-                    row.append('nan')
+        for row in merged_results:
             writer.writerow(row)
-
-    return lasttimestamp
 
 
 class MatchedFile():
